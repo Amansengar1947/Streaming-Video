@@ -46,6 +46,28 @@ function getKnownOEmbedEndpoint(targetUrl: string, parsed: URL): string | null {
   return null;
 }
 
+export function sanitizeEmbedHtml(rawHtml?: string): string | null {
+  if (!rawHtml || typeof rawHtml !== 'string') return null;
+  try {
+    const $ = cheerio.load(rawHtml);
+    const iframe = $('iframe').first();
+    if (iframe.length === 0) return null;
+
+    const src = iframe.attr('src');
+    if (!src) return null;
+
+    const parsed = new URL(src);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return null;
+    }
+
+    const cleanSrc = parsed.toString();
+    return `<iframe src="${cleanSrc}" width="100%" height="100%" frameborder="0" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+  } catch {
+    return null;
+  }
+}
+
 export class OEmbedResolver implements Resolver {
   public readonly name = 'OEmbedResolver';
 
@@ -83,15 +105,16 @@ export class OEmbedResolver implements Resolver {
       const data = await res.json<OEmbedData>();
       if (!data) return null;
 
-      // Check if it has embed HTML or video type
-      if (data.html || data.type === 'video' || data.type === 'rich') {
+      // Ensure embed HTML is strictly sanitized and contains only a valid HTTPS iframe
+      const safeEmbed = sanitizeEmbedHtml(data.html);
+      if (safeEmbed) {
         return {
           kind: 'embed',
           title: data.title || `${data.provider_name || 'Embedded'} Media`,
           thumbnail: data.thumbnail_url,
           provider: data.provider_name,
           originalUrl: ctx.rawUrl,
-          embedHtml: data.html,
+          embedHtml: safeEmbed,
         };
       }
     } catch {

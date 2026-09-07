@@ -60,6 +60,8 @@ export const remuxRoutes: FastifyPluginAsync = async (fastify) => {
 
       ffmpegArgs.push(
         '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        '-protocol_whitelist', 'http,https,tcp,tls',
+        '-max_redirects', '0',
         '-i', parsedUrl.toString(),
         '-c', 'copy',
         '-f', 'mp4',

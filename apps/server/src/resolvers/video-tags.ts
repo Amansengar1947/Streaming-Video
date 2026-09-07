@@ -59,14 +59,17 @@ export class VideoTagResolver implements Resolver {
       const directSrc = $(videoEl).attr('src');
       if (directSrc) {
         try {
-          const streamUrl = new URL(directSrc, ctx.rawUrl).toString();
-          const type = inferStreamType(streamUrl);
-          streams.push({
-            url: streamUrl,
-            type,
-            label: `Source (${type.toUpperCase()})`,
-            requiresProxy: true,
-          });
+          const parsed = new URL(directSrc, ctx.rawUrl);
+          if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+            const streamUrl = parsed.toString();
+            const type = inferStreamType(streamUrl);
+            streams.push({
+              url: streamUrl,
+              type,
+              label: `Source (${type.toUpperCase()})`,
+              requiresProxy: true,
+            });
+          }
         } catch {
           // ignore invalid url
         }
@@ -82,17 +85,20 @@ export class VideoTagResolver implements Resolver {
 
           if (src) {
             try {
-              const streamUrl = new URL(src, ctx.rawUrl).toString();
-              const type = inferStreamType(streamUrl, typeAttr);
+              const parsed = new URL(src, ctx.rawUrl);
+              if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+                const streamUrl = parsed.toString();
+                const type = inferStreamType(streamUrl, typeAttr);
 
-              streams.push({
-                url: streamUrl,
-                type,
-                quality: resAttr,
-                mimeType: typeAttr,
-                label: resAttr ? `${resAttr} (${type.toUpperCase()})` : `Source (${type.toUpperCase()})`,
-                requiresProxy: true,
-              });
+                streams.push({
+                  url: streamUrl,
+                  type,
+                  quality: resAttr,
+                  mimeType: typeAttr,
+                  label: resAttr ? `${resAttr} (${type.toUpperCase()})` : `Source (${type.toUpperCase()})`,
+                  requiresProxy: true,
+                });
+              }
             } catch {
               // ignore
             }

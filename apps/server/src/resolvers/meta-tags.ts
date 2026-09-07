@@ -106,13 +106,17 @@ export class MetaTagResolver implements Resolver {
 
         // If og:video points to an embed/player page or iframe
         if (ogVideoType.includes('html') || streamUrl.includes('embed') || streamUrl.includes('player')) {
-          return {
-            kind: 'embed',
-            title,
-            thumbnail,
-            originalUrl: ctx.rawUrl,
-            embedHtml: `<iframe src="${streamUrl}" width="100%" height="100%" frameborder="0" allowfullscreen allow="autoplay; encrypted-media"></iframe>`,
-          };
+          const parsedEmbed = new URL(streamUrl);
+          if (parsedEmbed.protocol === 'https:' || parsedEmbed.protocol === 'http:') {
+            const safeSrc = encodeURI(parsedEmbed.toString());
+            return {
+              kind: 'embed',
+              title,
+              thumbnail,
+              originalUrl: ctx.rawUrl,
+              embedHtml: `<iframe src="${safeSrc}" width="100%" height="100%" frameborder="0" allowfullscreen allow="autoplay; encrypted-media"></iframe>`,
+            };
+          }
         }
       } catch {
         // ignore
@@ -130,16 +134,21 @@ export class MetaTagResolver implements Resolver {
         for (const item of items) {
           if (item && (item['@type'] === 'VideoObject' || item['@type'] === 'MediaObject')) {
             if (item.contentUrl) {
-              const url = new URL(item.contentUrl, ctx.rawUrl).toString();
-              jsonLdStream = {
-                url,
-                type: inferStreamType(url),
-                label: 'JSON-LD Stream',
-                requiresProxy: true,
-              };
+              const url = new URL(item.contentUrl, ctx.rawUrl);
+              if (url.protocol === 'https:' || url.protocol === 'http:') {
+                jsonLdStream = {
+                  url: url.toString(),
+                  type: inferStreamType(url.toString()),
+                  label: 'JSON-LD Stream',
+                  requiresProxy: true,
+                };
+              }
             } else if (item.embedUrl) {
-              const url = new URL(item.embedUrl, ctx.rawUrl).toString();
-              jsonLdEmbed = `<iframe src="${url}" width="100%" height="100%" frameborder="0" allowfullscreen allow="autoplay; encrypted-media"></iframe>`;
+              const url = new URL(item.embedUrl, ctx.rawUrl);
+              if (url.protocol === 'https:' || url.protocol === 'http:') {
+                const safeSrc = encodeURI(url.toString());
+                jsonLdEmbed = `<iframe src="${safeSrc}" width="100%" height="100%" frameborder="0" allowfullscreen allow="autoplay; encrypted-media"></iframe>`;
+              }
             }
           }
         }

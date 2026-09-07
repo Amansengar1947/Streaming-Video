@@ -95,6 +95,12 @@ export const BrowserModal: React.FC<BrowserModalProps> = ({
       const data = event.data;
       if (!data || typeof data !== 'object') return;
 
+      // Verify that the message originated from one of our mounted iframe windows
+      const isFromOurIframe = Array.from(iframeRefs.current.values()).some(
+        (iframeEl) => iframeEl.contentWindow === event.source
+      );
+      if (!isFromOurIframe) return;
+
       // 1. Real-time media captured by 1DM sniffer agent
       if (data.type === 'MEDIADECK_SNIFFED_MEDIA' && data.payload) {
         const item: SniffedMediaItem = data.payload;
@@ -132,18 +138,13 @@ export const BrowserModal: React.FC<BrowserModalProps> = ({
         setAddressBarUrl(newTabUrl);
       }
 
-      // 4. Download link clicked: intercepted to prevent native file download, copied to clipboard, and alerted
+      // 4. Download link clicked: intercepted to prevent native file download and alert the user
       if (data.type === 'MEDIADECK_DOWNLOAD_CLICKED' && data.payload) {
         const payload = data.payload;
         const streamUrl = payload.url;
         const streamTitle = payload.title || 'Captured Video Stream';
         const streamType = payload.type || 'mp4';
         const streamId = `sniff-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-
-        // Automatically copy direct download stream link to clipboard
-        try {
-          navigator.clipboard.writeText(streamUrl);
-        } catch {}
 
         const item: SniffedMediaItem = {
           id: streamId,
@@ -545,7 +546,7 @@ export const BrowserModal: React.FC<BrowserModalProps> = ({
                 src={proxySrc}
                 className={styles.webviewFrame}
                 style={{ display: tab.id === activeTabId ? 'block' : 'none' }}
-                sandbox="allow-scripts allow-forms allow-same-origin allow-downloads allow-modals"
+                sandbox="allow-scripts allow-forms allow-downloads allow-modals"
                 onLoad={() => handleIframeLoad(tab.id)}
                 title={tab.title}
               />
