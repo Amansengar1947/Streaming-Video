@@ -15,6 +15,7 @@ export interface Config {
   rateLimitWindowMs: number;
   proxySecret: string;
   nodeEnv: string;
+  warpProxyUrl?: string;
 }
 
 const defaultSecret =
@@ -37,4 +38,5 @@ export const config: Config = {
   rateLimitWindowMs: 60 * 1000,
   proxySecret: process.env.PROXY_SECRET || defaultSecret,
   nodeEnv: process.env.NODE_ENV || 'development',
+  warpProxyUrl: process.env.WARP_PROXY_URL || process.env.HTTP_PROXY,
 };

@@ -1,4 +1,4 @@
-import { Agent, buildConnector, request as undiciRequest, Dispatcher } from 'undici';
+import { Agent, ProxyAgent, buildConnector, request as undiciRequest, Dispatcher } from 'undici';
 import { AppError } from '@video-player/shared';
 import { validateAndParseUrl } from '../security/url-validator.js';
 import { resolveAndValidateHost } from '../security/dns-resolver.js';
@@ -19,12 +19,21 @@ const customConnector = buildConnector({
   },
 });
 
-export const ssrfSafeAgent = new Agent({
+const defaultAgent = new Agent({
   connect: customConnector,
   connectTimeout: 5000,
   headersTimeout: config.resolveTimeoutMs,
   bodyTimeout: config.resolveTimeoutMs * 2,
 });
+
+export const ssrfSafeAgent: Dispatcher = config.warpProxyUrl
+  ? new ProxyAgent({
+      uri: config.warpProxyUrl,
+      connectTimeout: 5000,
+      headersTimeout: config.resolveTimeoutMs,
+      bodyTimeout: config.resolveTimeoutMs * 2,
+    })
+  : defaultAgent;
 
 export interface SafeHttpResponse {
   statusCode: number;
