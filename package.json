@@ -1,0 +1,20 @@
+{
+  "name": "video-player-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:server": "pnpm --filter @video-player/server dev",
+    "dev:web": "pnpm --filter @video-player/web dev",
+    "dev": "pnpm --parallel --filter @video-player/server --filter @video-player/web dev",
+    "build:shared": "pnpm --filter @video-player/shared build",
+    "build:server": "pnpm --filter @video-player/server build",
+    "build:web": "pnpm --filter @video-player/web build",
+    "build": "pnpm build:shared && pnpm build:server && pnpm build:web",
+    "test": "pnpm --recursive run test",
+    "typecheck": "pnpm --recursive run typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.7"
+  }
+}

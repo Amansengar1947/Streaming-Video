@@ -1,0 +1,33 @@
+{
+  "name": "@video-player/server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.2",
+    "@fastify/rate-limit": "^10.2.2",
+    "@fastify/type-provider-typebox": "^5.1.0",
+    "@sinclair/typebox": "^0.34.28",
+    "@video-player/shared": "workspace:*",
+    "cheerio": "^1.0.0",
+    "fastify": "^5.2.1",
+    "ipaddr.js": "^2.2.0",
+    "lru-cache": "^11.0.2",
+    "undici": "^7.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "pino-pretty": "^13.1.3",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.7"
+  }
+}
