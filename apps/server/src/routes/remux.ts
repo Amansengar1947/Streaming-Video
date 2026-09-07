@@ -61,7 +61,6 @@ export const remuxRoutes: FastifyPluginAsync = async (fastify) => {
       ffmpegArgs.push(
         '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         '-protocol_whitelist', 'http,https,tcp,tls',
-        '-max_redirects', '0',
         '-i', parsedUrl.toString(),
         '-c', 'copy',
         '-f', 'mp4',
@@ -130,6 +129,10 @@ export const remuxRoutes: FastifyPluginAsync = async (fastify) => {
       ffmpegProc.stdout.on('error', (err: any) => {
         request.log.error({ err }, 'FFmpeg stdout pipe error');
         cleanup();
+      });
+
+      ffmpegProc.stderr?.on('data', (chunk: Buffer) => {
+        request.log.warn({ ffmpegStderr: chunk.toString() }, 'FFmpeg remux stderr');
       });
 
       ffmpegProc.stdout.pipe(pacedStream);
