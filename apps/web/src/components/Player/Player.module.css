@@ -121,6 +121,129 @@
   pointer-events: auto;
 }
 
+/* Center Quick Action Controls */
+.controlsCenter {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  pointer-events: auto;
+}
+
+.centerPlayBtn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  transition: transform var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.centerPlayBtn:hover, .centerPlayBtn:active {
+  background: rgba(99, 102, 241, 0.75);
+  border-color: #ffffff;
+  transform: scale(1.08);
+}
+
+.centerActionBtn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform var(--transition-fast), background-color var(--transition-fast);
+}
+
+.centerActionBtn:hover, .centerActionBtn:active {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.08);
+}
+
+.centerSkipBadge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  margin-top: -2px;
+  color: #e2e8f0;
+}
+
+/* Ripple Animation Overlay for Double-Tap Skip */
+.rippleOverlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 36%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 15;
+}
+
+.rippleLeft {
+  left: 0;
+  border-top-right-radius: 50%;
+  border-bottom-right-radius: 50%;
+  background: radial-gradient(circle at left center, rgba(255, 255, 255, 0.25) 0%, transparent 70%);
+  animation: rippleFade 0.65s ease-out forwards;
+}
+
+.rippleRight {
+  right: 0;
+  border-top-left-radius: 50%;
+  border-bottom-left-radius: 50%;
+  background: radial-gradient(circle at right center, rgba(255, 255, 255, 0.25) 0%, transparent 70%);
+  animation: rippleFade 0.65s ease-out forwards;
+}
+
+.rippleCircle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  font-family: var(--font-mono);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  animation: pulseScale 0.65s ease-out forwards;
+}
+
+@keyframes rippleFade {
+  0% { opacity: 0; }
+  25% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
+@keyframes pulseScale {
+  0% { transform: scale(0.7); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+.desktopOnly {
+  display: inline-flex;
+}
+
 .controlsBottom {
   display: flex;
   flex-direction: column;
@@ -726,5 +849,123 @@
   background: rgba(239, 68, 68, 0.2);
   border-color: rgba(239, 68, 68, 0.4);
   color: #ef4444;
+}
+
+/* Mobile Responsive Breakpoints for Player */
+@media (max-width: 640px) {
+  .playerContainer {
+    border-radius: var(--radius-md);
+  }
+
+  .desktopOnly {
+    display: none !important;
+  }
+
+  .controlsOverlay {
+    padding: 10px;
+  }
+
+  .controlsCenter {
+    gap: 20px;
+  }
+
+  .centerPlayBtn {
+    width: 54px;
+    height: 54px;
+  }
+
+  .centerActionBtn {
+    width: 38px;
+    height: 38px;
+  }
+
+  .controlsRow {
+    gap: 4px;
+  }
+
+  .controlsGroup {
+    gap: 3px;
+  }
+
+  .ctrlBtn {
+    width: 38px;
+    height: 38px;
+  }
+
+  .ctrlBtnText {
+    height: 36px;
+    padding: 0 8px;
+    font-size: 0.8rem;
+  }
+
+  /* Hide desktop volume slider on mobile, keep clean mute button */
+  .volumeSliderContainer {
+    display: none !important;
+  }
+
+  /* Compact progress bar on mobile with larger touch hitbox */
+  .progressContainer {
+    height: 28px;
+    touch-action: none;
+  }
+
+  .progressTrack {
+    height: 4px;
+  }
+
+  .progressThumb {
+    width: 14px;
+    height: 14px;
+    transform: translateY(-50%) scale(1);
+  }
+
+  .timeDisplay {
+    font-size: 0.76rem;
+  }
+
+  .speedometerBadge {
+    display: none;
+  }
+
+  .dropdownMenu {
+    bottom: 46px;
+    min-width: 130px;
+  }
+
+  .menuItem {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+  }
+
+  /* Stream switcher horizontal scroll */
+  .streamSwitcher {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
+  .streamSwitcher::-webkit-scrollbar {
+    display: none;
+  }
+
+  .streamChip {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Advanced Stats Modal on Mobile */
+  .statsCard {
+    max-width: 100%;
+    max-height: 90vh;
+    border-radius: var(--radius-md);
+  }
+
+  .statsGrid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
 }
 

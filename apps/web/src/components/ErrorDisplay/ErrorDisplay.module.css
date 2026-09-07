@@ -103,3 +103,23 @@
 .dismissBtn:hover {
   color: var(--text-primary);
 }
+
+@media (max-width: 640px) {
+  .container {
+    padding: 14px;
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  .actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .retryBtn, .dismissBtn {
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}

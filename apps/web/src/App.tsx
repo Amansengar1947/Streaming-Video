@@ -151,29 +151,29 @@ export const App: React.FC = () => {
                 className={`${styles.statusPill} ${backendOnline ? styles.statusOnline : styles.statusOffline}`}
                 title={
                   backendOnline
-                    ? 'Backend API server is running at http://127.0.0.1:3001'
-                    : 'Backend API is offline. Start the backend with "pnpm dev" or "pnpm dev:server".'
+                    ? 'Backend API server is online'
+                    : 'Backend API is offline'
                 }
               >
                 <span className={styles.statusDot} />
-                <span>{backendOnline ? 'Backend Online' : 'Backend Offline'}</span>
+                <span className={styles.statusText}>{backendOnline ? 'Online' : 'Offline'}</span>
               </span>
             )}
 
             {/* 1DM Browser Sniffer Launcher Button */}
             <button
               type="button"
-              className={styles.helpBtn}
+              className={`${styles.helpBtn} ${styles.snifferBtn}`}
               onClick={() => handleOpenBrowser()}
               title="Open In-App Browser to navigate pages and capture video streams (1DM mode)"
-              style={{ color: 'var(--accent)', fontWeight: 600, borderColor: 'var(--accent)' }}
             >
-              <span>🌐 Browser Sniffer</span>
+              <span>🌐</span>
+              <span className={styles.snifferBtnText}>Sniffer</span>
             </button>
 
             <button
               type="button"
-              className={styles.helpBtn}
+              className={`${styles.helpBtn} ${styles.desktopOnly}`}
               onClick={() => setIsShortcutsOpen(true)}
               title="Keyboard Shortcuts (?)"
             >

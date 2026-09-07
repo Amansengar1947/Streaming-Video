@@ -20,11 +20,11 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [hoverPosition, setHoverPosition] = useState(0);
 
-  const calculateTimeFromEvent = useCallback(
-    (e: React.MouseEvent | MouseEvent): number => {
+  const calculateTimeFromClientX = useCallback(
+    (clientX: number): number => {
       if (!barRef.current || duration <= 0) return 0;
       const rect = barRef.current.getBoundingClientRect();
-      const clickX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+      const clickX = Math.max(0, Math.min(clientX - rect.left, rect.width));
       const percentage = clickX / rect.width;
       return percentage * duration;
     },
@@ -33,11 +33,11 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
-    const newTime = calculateTimeFromEvent(e);
+    const newTime = calculateTimeFromClientX(e.clientX);
     onSeek(newTime);
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      const time = calculateTimeFromEvent(moveEvent);
+      const time = calculateTimeFromClientX(moveEvent.clientX);
       onSeek(time);
     };
 
@@ -60,6 +60,40 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   };
 
   const handleMouseLeave = () => {
+    if (!isDragging) {
+      setHoverTime(null);
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    setIsDragging(true);
+    const clientX = e.touches[0].clientX;
+    const newTime = calculateTimeFromClientX(clientX);
+    onSeek(newTime);
+    if (barRef.current) {
+      const rect = barRef.current.getBoundingClientRect();
+      const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+      setHoverPosition(x);
+      setHoverTime(newTime);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    const clientX = e.touches[0].clientX;
+    const newTime = calculateTimeFromClientX(clientX);
+    onSeek(newTime);
+    if (barRef.current) {
+      const rect = barRef.current.getBoundingClientRect();
+      const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+      setHoverPosition(x);
+      setHoverTime(newTime);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
     setHoverTime(null);
   };
 
@@ -73,6 +107,10 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
       role="slider"
       aria-label="Video seek bar"
       aria-valuemin={0}

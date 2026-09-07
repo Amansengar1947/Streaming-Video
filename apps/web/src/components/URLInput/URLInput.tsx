@@ -95,47 +95,49 @@ export const URLInput: React.FC<URLInputProps> = ({ onLoadUrl, isLoading, initia
     <div className={styles.container}>
       <form onSubmit={handleSubmit}>
         <div className={styles.inputGroup}>
-          <div className={styles.inputIcon}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-            </svg>
-          </div>
+          <div className={styles.inputMain}>
+            <div className={styles.inputIcon}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+              </svg>
+            </div>
 
-          <input
-            type="url"
-            className={styles.input}
-            placeholder="Paste a video URL (MP4, HLS .m3u8, DASH .mpd, or page URL)..."
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            disabled={isLoading}
-            required
-            autoFocus
-          />
+            <input
+              type="url"
+              className={styles.input}
+              placeholder="Paste a video URL (MP4, HLS, DASH, or page URL)..."
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              disabled={isLoading}
+              required
+            />
 
-          <div className={styles.buttonGroup}>
             {url && (
               <button
                 type="button"
-                className={styles.actionBtn}
+                className={styles.clearBtn}
                 onClick={handleClear}
                 title="Clear input"
+                aria-label="Clear input"
               >
-                Clear
+                ✕
               </button>
             )}
+          </div>
 
+          <div className={styles.buttonGroup}>
             <button
               type="button"
               className={styles.actionBtn}
               onClick={handlePaste}
               title="Paste from clipboard"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
                 <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
               </svg>
-              Paste
+              <span>Paste</span>
             </button>
 
             <button
@@ -143,7 +145,16 @@ export const URLInput: React.FC<URLInputProps> = ({ onLoadUrl, isLoading, initia
               className={styles.submitBtn}
               disabled={isLoading || !url.trim()}
             >
-              {isLoading ? 'Analyzing...' : 'Play / Load'}
+              {isLoading ? (
+                <span>Analyzing...</span>
+              ) : (
+                <>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                  </svg>
+                  <span>Play / Load</span>
+                </>
+              )}
             </button>
           </div>
         </div>

@@ -36,6 +36,12 @@
 
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
+
+  /* Safe Area Insets for Mobile Notches & Bars */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
 }
 
 [data-theme='light'] {
@@ -75,6 +81,8 @@ html, body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
   transition: background-color var(--transition-normal), color var(--transition-normal);
 }
 

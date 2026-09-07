@@ -673,3 +673,88 @@
   color: var(--text-primary);
 }
 
+/* Mobile Responsive Optimization for In-App Browser */
+@media (max-width: 640px) {
+  .overlay {
+    padding: 0;
+  }
+
+  .browserContainer {
+    max-width: 100%;
+    width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: none;
+  }
+
+  .tabBar {
+    height: 36px;
+    padding: 2px 6px 0 6px;
+  }
+
+  .tabItem {
+    min-width: 80px;
+    max-width: 130px;
+    font-size: 0.72rem;
+    padding: 0 6px 0 8px;
+  }
+
+  .toolbar {
+    height: 48px;
+    padding: 0 8px;
+    gap: 6px;
+  }
+
+  .navBtn {
+    width: 28px;
+    height: 28px;
+  }
+
+  .addressInputWrapper {
+    height: 32px;
+    padding: 0 8px;
+  }
+
+  .addressInput {
+    font-size: 0.8rem;
+  }
+
+  /* Sniffer Drawer becomes a bottom sheet on mobile */
+  .drawer {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 100%;
+    height: 75vh;
+    max-height: 80dvh;
+    border-left: none;
+    border-top: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.6);
+    animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  .floatingBadge {
+    bottom: calc(16px + var(--safe-area-bottom));
+    right: 16px;
+    padding: 8px 14px;
+    font-size: 0.82rem;
+  }
+
+  .mediaDetectedToast {
+    left: 10px;
+    right: 10px;
+    bottom: calc(16px + var(--safe-area-bottom));
+    max-width: calc(100% - 20px);
+    padding: 10px 12px;
+  }
+}
+

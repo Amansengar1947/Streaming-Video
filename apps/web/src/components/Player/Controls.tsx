@@ -66,7 +66,7 @@ export const Controls: React.FC<ControlsProps> = ({
         <div />
         <button
           type="button"
-          className={styles.ctrlBtnSmall}
+          className={`${styles.ctrlBtnSmall} ${styles.desktopOnly}`}
           onClick={onOpenShortcuts}
           title="Keyboard Shortcuts (?)"
           aria-label="Keyboard Shortcuts"
@@ -75,7 +75,62 @@ export const Controls: React.FC<ControlsProps> = ({
         </button>
       </div>
 
-      {/* Center play icon toggle indicator (optional on click) */}
+      {/* Center play / rewind / forward quick action overlay */}
+      <div className={styles.controlsCenter}>
+        <button
+          type="button"
+          className={`${styles.centerActionBtn} ${styles.centerSkipBtn}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSeek(Math.max(0, currentTime - 10));
+          }}
+          title="Rewind 10s"
+          aria-label="Rewind 10 seconds"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/>
+          </svg>
+          <span className={styles.centerSkipBadge}>10</span>
+        </button>
+
+        <button
+          type="button"
+          className={styles.centerPlayBtn}
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePlay();
+          }}
+          aria-label={isPlaying ? 'Pause' : 'Play'}
+          title={isPlaying ? 'Pause' : 'Play'}
+        >
+          {isPlaying ? (
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="4" width="4" height="16" rx="1"></rect>
+              <rect x="14" y="4" width="4" height="16" rx="1"></rect>
+            </svg>
+          ) : (
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: '4px' }}>
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+          )}
+        </button>
+
+        <button
+          type="button"
+          className={`${styles.centerActionBtn} ${styles.centerSkipBtn}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSeek(Math.min(duration, currentTime + 10));
+          }}
+          title="Forward 10s"
+          aria-label="Forward 10 seconds"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M13 17l5-5-5-5M6 17l5-5-5-5"/>
+          </svg>
+          <span className={styles.centerSkipBadge}>10</span>
+        </button>
+      </div>
 
       {/* Bottom controls bar */}
       <div className={styles.controlsBottom}>

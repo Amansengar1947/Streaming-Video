@@ -87,6 +87,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideTimerRef = useRef<number | null>(null);
 
+  // Mobile double-tap gestures and ripple animation state
+  const [ripple, setRipple] = useState<{ side: 'left' | 'right'; id: number } | null>(null);
+  const lastTapTimeRef = useRef<number>(0);
+  const lastTapXRef = useRef<number>(0);
+  const singleTapTimerRef = useRef<number | null>(null);
+
   const resetHideTimer = useCallback(() => {
     setControlsVisible(true);
     if (hideTimerRef.current) {
@@ -685,12 +691,61 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     resetHideTimer,
   ]);
 
+  const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // If target is an interactive control, let its own handler execute
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('input') || target.closest('[role="slider"]')) {
+      resetHideTimer();
+      return;
+    }
+
+    const now = performance.now();
+    const rect = containerRef.current?.getBoundingClientRect();
+    const clickX = rect ? e.clientX - rect.left : 0;
+    const width = rect ? rect.width : 0;
+    const isDoubleTap = now - lastTapTimeRef.current < 300 && Math.abs(clickX - lastTapXRef.current) < 80;
+
+    lastTapTimeRef.current = now;
+    lastTapXRef.current = clickX;
+
+    if (isDoubleTap) {
+      if (singleTapTimerRef.current) {
+        window.clearTimeout(singleTapTimerRef.current);
+        singleTapTimerRef.current = null;
+      }
+      // Left 35% -> Rewind 10s
+      if (clickX < width * 0.35) {
+        handleSeek(Math.max(0, currentTime - 10));
+        setRipple({ side: 'left', id: now });
+        setTimeout(() => setRipple(null), 650);
+        return;
+      }
+      // Right 35% -> Forward 10s
+      if (clickX > width * 0.65) {
+        handleSeek(Math.min(duration, currentTime + 10));
+        setRipple({ side: 'right', id: now });
+        setTimeout(() => setRipple(null), 650);
+        return;
+      }
+      // Center double tap -> Toggle Play
+      handleTogglePlay();
+    } else {
+      // Single tap: toggle controls overlay
+      singleTapTimerRef.current = window.setTimeout(() => {
+        setControlsVisible((prev) => {
+          if (!prev) resetHideTimer();
+          return !prev;
+        });
+      }, 220);
+    }
+  };
+
   return (
     <div
       className={styles.playerContainer}
       ref={containerRef}
       onMouseMove={resetHideTimer}
-      onClick={resetHideTimer}
+      onClick={handleContainerClick}
     >
       <video
         ref={videoRef}
@@ -698,9 +753,31 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         className={styles.videoElement}
         poster={poster}
         playsInline
-        onClick={handleTogglePlay}
         onError={handleNativeVideoError}
       />
+
+      {/* Ripple Animation Overlays for Double-Tap Skip */}
+      {ripple && (
+        <div className={`${styles.rippleOverlay} ${ripple.side === 'left' ? styles.rippleLeft : styles.rippleRight}`}>
+          <div className={styles.rippleCircle}>
+            {ripple.side === 'left' ? (
+              <>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/>
+                </svg>
+                <span>10s</span>
+              </>
+            ) : (
+              <>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M13 17l5-5-5-5M6 17l5-5-5-5"/>
+                </svg>
+                <span>10s</span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Buffering & Loading Indicator */}
       {(isBuffering || (isLoadingMedia && !isAdaptive) || isAutoplayBlocked) && (

@@ -101,3 +101,40 @@
   color: var(--text-primary);
   border-color: var(--accent);
 }
+
+/* Mobile Responsive */
+@media (max-width: 640px) {
+  .container {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 12px 14px;
+    margin-top: 12px;
+  }
+
+  .thumbnail {
+    width: 52px;
+    height: 40px;
+  }
+
+  .title {
+    font-size: 0.92rem;
+  }
+
+  .badges {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .right {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .sourceLink {
+    width: 100%;
+    justify-content: center;
+    height: 38px;
+    font-size: 0.82rem;
+  }
+}

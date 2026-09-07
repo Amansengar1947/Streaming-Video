@@ -21,27 +21,58 @@
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
+.inputMain {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
 .inputIcon {
   display: flex;
   align-items: center;
   justify-content: center;
   padding-left: 16px;
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .input {
   flex: 1;
+  min-width: 0;
   height: 52px;
-  padding: 0 14px;
+  padding: 0 12px;
   background: transparent;
   border: none;
   color: var(--text-primary);
-  font-size: 1rem;
+  font-size: 0.98rem;
   outline: none;
 }
 
 .input::placeholder {
   color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.clearBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-right: 6px;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-surface);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.clearBtn:hover {
+  background-color: var(--bg-surface-hover);
+  color: var(--text-primary);
 }
 
 .buttonGroup {
@@ -49,14 +80,16 @@
   align-items: center;
   gap: 8px;
   padding-right: 8px;
+  flex-shrink: 0;
 }
 
 .actionBtn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   height: 38px;
-  padding: 0 12px;
+  padding: 0 14px;
   background-color: var(--bg-surface);
   color: var(--text-secondary);
   border: 1px solid var(--border-subtle);
@@ -77,18 +110,20 @@
   justify-content: center;
   gap: 8px;
   height: 38px;
-  padding: 0 20px;
-  background-color: var(--accent);
+  padding: 0 18px;
+  background: linear-gradient(135deg, var(--accent) 0%, #4f46e5 100%);
   color: #ffffff;
   border-radius: var(--radius-md);
   font-size: 0.9rem;
   font-weight: 600;
+  box-shadow: 0 2px 6px var(--accent-glow);
   transition: all var(--transition-fast);
 }
 
 .submitBtn:hover:not(:disabled) {
-  background-color: var(--accent-hover);
-  box-shadow: 0 2px 8px var(--accent-glow);
+  opacity: 0.95;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--accent-glow);
 }
 
 .submitBtn:disabled {
@@ -96,26 +131,39 @@
   cursor: not-allowed;
 }
 
+/* Quick Samples Carousel */
 .samplesRow {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   font-size: 0.8rem;
   color: var(--text-muted);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+
+.samplesRow::-webkit-scrollbar {
+  display: none;
 }
 
 .sampleLabel {
-  font-weight: 500;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .sampleChip {
-  padding: 4px 10px;
+  padding: 5px 12px;
   background-color: var(--bg-surface);
   color: var(--text-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-full);
   font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: all var(--transition-fast);
 }
 
@@ -125,6 +173,7 @@
   border-color: var(--accent);
 }
 
+/* Recents */
 .recentsSection {
   display: flex;
   flex-direction: column;
@@ -155,24 +204,33 @@
 
 .recentsList {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+
+.recentsList::-webkit-scrollbar {
+  display: none;
 }
 
 .recentItem {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 6px 12px;
   background-color: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
-  font-size: 0.8rem;
-  max-width: 320px;
+  font-size: 0.78rem;
+  max-width: 260px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex-shrink: 0;
   transition: all var(--transition-fast);
 }
 
@@ -180,4 +238,54 @@
   background-color: var(--bg-surface-hover);
   color: var(--accent);
   border-color: var(--accent);
+}
+
+/* Mobile Responsive Optimization */
+@media (max-width: 640px) {
+  .inputGroup {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 6px;
+    gap: 8px;
+    border-radius: var(--radius-md);
+  }
+
+  .inputMain {
+    width: 100%;
+    height: 44px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: var(--radius-sm);
+  }
+
+  .inputIcon {
+    padding-left: 10px;
+  }
+
+  .input {
+    height: 44px;
+    font-size: 0.92rem;
+    padding: 0 8px;
+  }
+
+  .buttonGroup {
+    display: grid;
+    grid-template-columns: 85px 1fr;
+    gap: 8px;
+    width: 100%;
+    padding-right: 0;
+  }
+
+  .actionBtn {
+    height: 42px;
+    font-size: 0.88rem;
+  }
+
+  .submitBtn {
+    height: 42px;
+    font-size: 0.92rem;
+  }
+
+  .sampleChip {
+    padding: 6px 12px;
+  }
 }
