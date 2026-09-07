@@ -50,6 +50,19 @@ export interface SniffedMediaItem {
   fileSize?: number;
 }
 
+export interface WatchHistoryItem {
+  id: string;
+  title: string;
+  originalUrl: string;
+  directStreamUrl?: string;
+  streamType?: StreamType;
+  thumbnail?: string;
+  duration: number;
+  currentTime: number;
+  lastWatched: number;
+  resolvedMedia?: ResolvedMedia;
+}
+
 export interface ResolveRequest {
   url: string;
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { ResolvedMedia, SniffedMediaItem } from '@video-player/shared';
+import type { ResolvedMedia, SniffedMediaItem, WatchHistoryItem } from '@video-player/shared';
 import styles from './App.module.css';
 import { useTheme } from './hooks/useTheme.js';
 import { resolveUrl, checkHealth } from './api/client.js';
@@ -11,6 +11,9 @@ import { MediaInfo } from './components/MediaInfo/MediaInfo.js';
 import { ThemeToggle } from './components/ThemeToggle/ThemeToggle.js';
 import { ShortcutsModal } from './components/ShortcutsModal/ShortcutsModal.js';
 import { BrowserModal } from './components/Browser/BrowserModal.js';
+import { useWatchHistory } from './hooks/useWatchHistory.js';
+import { HistoryDrawer } from './components/History/HistoryDrawer.js';
+import { ContinueWatching } from './components/History/ContinueWatching.js';
 
 export const App: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
@@ -21,6 +24,19 @@ export const App: React.FC = () => {
   const [error, setError] = useState<{ code?: string; message: string; detail?: string } | null>(null);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+
+  // Watch History & Resume state
+  const {
+    history,
+    saveItem,
+    updateProgress,
+    updateItemStream,
+    removeItem,
+    clearHistory,
+    getItem,
+  } = useWatchHistory();
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [initialSeekTime, setInitialSeekTime] = useState<number>(0);
 
   // In-app Browser & 1DM Sniffer state
   const [isBrowserOpen, setIsBrowserOpen] = useState(false);
@@ -51,12 +67,19 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  const handleLoadUrl = async (urlToLoad: string) => {
+  const handleLoadUrl = async (urlToLoad: string, resumeAtTime?: number) => {
     if (!urlToLoad.trim()) return;
 
     setCurrentUrl(urlToLoad);
     setIsLoading(true);
     setError(null);
+
+    // Look up existing history for resume position if not explicitly provided
+    const existing = getItem(urlToLoad);
+    const resumeTime = typeof resumeAtTime === 'number'
+      ? resumeAtTime
+      : (existing && existing.currentTime > 3 ? existing.currentTime : 0);
+    setInitialSeekTime(resumeTime);
 
     // Update browser URL query without reload
     const newSearch = new URLSearchParams(window.location.search);
@@ -67,6 +90,8 @@ export const App: React.FC = () => {
       const result = await resolveUrl(urlToLoad);
       setResolvedMedia(result);
       setBackendOnline(true);
+      // Save / update in history
+      saveItem(result, resumeTime, result.duration || 0);
     } catch (err: any) {
       setError({
         code: err.code || 'RESOLUTION_FAILED',
@@ -86,6 +111,7 @@ export const App: React.FC = () => {
     setError({
       code: 'PLAYBACK_ERROR',
       message: errorMsg,
+      detail: 'If this streaming link has an expiration time (e.g. pre-signed Cloudflare R2 / S3 URL), click "Refresh Link from Source" below to obtain a fresh link and resume.',
     });
   }, []);
 
@@ -103,6 +129,7 @@ export const App: React.FC = () => {
     try {
       const backendResolved = await resolveUrl(item.url);
       setResolvedMedia(backendResolved);
+      saveItem(backendResolved, 0, backendResolved.duration || 0);
     } catch (err: any) {
       // If backend resolve fails, fallback to optimistic stream
       const isMkv = item.url.toLowerCase().includes('.mkv') || item.type === 'mkv' || (item.mimeType?.includes('matroska') ?? false);
@@ -122,6 +149,67 @@ export const App: React.FC = () => {
         ],
       };
       setResolvedMedia(initialMedia);
+      saveItem(initialMedia, 0, 0);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Play an item selected from History
+  const handlePlayHistoryItem = (item: WatchHistoryItem) => {
+    const resumeTime = item.currentTime > 3 ? item.currentTime : 0;
+    setInitialSeekTime(resumeTime);
+    setCurrentUrl(item.originalUrl);
+    setError(null);
+
+    // Update browser URL query
+    const newSearch = new URLSearchParams(window.location.search);
+    newSearch.set('url', item.originalUrl);
+    window.history.replaceState(null, '', `${window.location.pathname}?${newSearch.toString()}`);
+
+    if (item.resolvedMedia && item.resolvedMedia.streams && item.resolvedMedia.streams.length > 0) {
+      setResolvedMedia(item.resolvedMedia);
+      saveItem(item.resolvedMedia, resumeTime, item.duration);
+    } else {
+      handleLoadUrl(item.originalUrl, resumeTime);
+    }
+  };
+
+  // Refresh expired link from original source
+  const handleRefreshHistoryItem = async (item: WatchHistoryItem) => {
+    try {
+      const refreshed = await resolveUrl(item.originalUrl);
+      updateItemStream(item.id, refreshed);
+      if (currentUrl === item.originalUrl || !resolvedMedia) {
+        setInitialSeekTime(item.currentTime || 0);
+        setCurrentUrl(item.originalUrl);
+        setResolvedMedia(refreshed);
+        setError(null);
+      }
+    } catch (err: any) {
+      setError({
+        code: 'REFRESH_FAILED',
+        message: `Failed to refresh stream link from ${item.originalUrl}: ${err.message || 'Source unreachable'}`,
+        detail: err.detail,
+      });
+    }
+  };
+
+  // Refresh current active stream from original source (e.g. from error screen)
+  const handleRefreshCurrentSource = async () => {
+    if (!currentUrl) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const refreshed = await resolveUrl(currentUrl);
+      updateItemStream(currentUrl, refreshed);
+      setResolvedMedia(refreshed);
+    } catch (err: any) {
+      setError({
+        code: 'REFRESH_FAILED',
+        message: `Failed to refresh link from original source: ${err.message || 'Source unreachable'}`,
+        detail: err.detail,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -159,6 +247,20 @@ export const App: React.FC = () => {
                 <span className={styles.statusText}>{backendOnline ? 'Online' : 'Offline'}</span>
               </span>
             )}
+
+            {/* Watch History Launcher Button */}
+            <button
+              type="button"
+              className={`${styles.helpBtn} ${styles.historyBtn}`}
+              onClick={() => setIsHistoryOpen(true)}
+              title="View your saved videos and watch history"
+            >
+              <span>🕒</span>
+              <span className={styles.historyBtnText}>History</span>
+              {history.length > 0 && (
+                <span className={styles.historyBadge}>{history.length}</span>
+              )}
+            </button>
 
             {/* 1DM Browser Sniffer Launcher Button */}
             <button
@@ -230,6 +332,17 @@ export const App: React.FC = () => {
           initialUrl={currentUrl}
         />
 
+        {/* Continue Watching Carousel (when history exists and not currently playing) */}
+        {history.length > 0 && !resolvedMedia && !isLoading && (
+          <ContinueWatching
+            items={history}
+            onPlay={handlePlayHistoryItem}
+            onRefresh={handleRefreshHistoryItem}
+            onRemove={removeItem}
+            onOpenDrawer={() => setIsHistoryOpen(true)}
+          />
+        )}
+
         {/* Loading Indicator */}
         {isLoading && <Loading message="Resolving media stream and headers..." />}
 
@@ -240,6 +353,7 @@ export const App: React.FC = () => {
             message={error.message}
             detail={error.detail}
             onRetry={() => handleLoadUrl(currentUrl)}
+            onRefreshSource={currentUrl ? handleRefreshCurrentSource : undefined}
             onDismiss={() => setError(null)}
             onOpenBrowser={() => handleOpenBrowser(currentUrl)}
           />
@@ -250,8 +364,11 @@ export const App: React.FC = () => {
           <section className={styles.playerSection}>
             <Player
               media={resolvedMedia}
+              initialTime={initialSeekTime}
+              onTimeUpdate={(time, dur) => updateProgress(currentUrl, time, dur)}
               onOpenShortcuts={() => setIsShortcutsOpen(true)}
               onError={handlePlayerError}
+              onRefreshSource={handleRefreshCurrentSource}
             />
 
             <MediaInfo
@@ -279,6 +396,17 @@ export const App: React.FC = () => {
         initialUrl={browserTargetUrl}
         onClose={() => setIsBrowserOpen(false)}
         onPlayStream={handlePlaySniffedStream}
+      />
+
+      {/* Watch History Drawer Modal */}
+      <HistoryDrawer
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        items={history}
+        onPlay={handlePlayHistoryItem}
+        onRefresh={handleRefreshHistoryItem}
+        onRemove={removeItem}
+        onClearAll={clearHistory}
       />
     </div>
   );

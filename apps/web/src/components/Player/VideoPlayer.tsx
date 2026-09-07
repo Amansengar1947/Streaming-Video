@@ -11,16 +11,22 @@ interface VideoPlayerProps {
   stream: StreamInfo;
   mediaDuration?: number;
   poster?: string;
+  initialTime?: number;
+  onTimeUpdate?: (currentTime: number, duration: number) => void;
   onOpenShortcuts: () => void;
   onError: (error: string) => void;
+  onRefreshSource?: () => void;
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   stream,
   mediaDuration,
   poster,
+  initialTime = 0,
+  onTimeUpdate: onTimeUpdateProp,
   onOpenShortcuts,
   onError,
+  onRefreshSource,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -29,9 +35,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   // Fallback guard to strictly prevent infinite reload loops
   const hasTriedFallback = useRef(false);
 
+  // Resume playback notification state and guard
+  const hasResumedRef = useRef(false);
+  const [resumeNotice, setResumeNotice] = useState<{ time: number } | null>(null);
+  const onTimeUpdatePropRef = useRef(onTimeUpdateProp);
+  onTimeUpdatePropRef.current = onTimeUpdateProp;
+
   // Stream offset for remux streams seeking beyond buffer
-  const [streamOffset, setStreamOffset] = useState<number>(0);
-  const streamOffsetRef = useRef<number>(0);
+  const initialOffset = initialTime > 3 && (stream.url.includes('/api/stream/remux') || (stream.proxyUrl && stream.proxyUrl.includes('/api/stream/remux'))) ? Math.floor(initialTime) : 0;
+  const [streamOffset, setStreamOffset] = useState<number>(initialOffset);
+  const streamOffsetRef = useRef<number>(initialOffset);
   streamOffsetRef.current = streamOffset;
 
   const mediaDurationRef = useRef<number | undefined>(mediaDuration);
@@ -39,7 +52,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   // Active source for progressive (non-Shaka) media: prioritize proxyUrl if stream requires proxy
   // MKV Guardian: Never pass raw MKV directly to <video> when remux/proxy is available
-  const getPlayableSource = useCallback((s: StreamInfo) => {
+  const getPlayableSource = useCallback((s: StreamInfo, startAt = 0) => {
     let src = s.requiresProxy && s.proxyUrl ? s.proxyUrl : s.url;
     const isMkv = s.type === 'mkv' || s.url.toLowerCase().includes('.mkv') || src.toLowerCase().includes('.mkv');
     if (isMkv && !src.includes('/api/stream/remux')) {
@@ -49,14 +62,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         src = s.proxyUrl.replace('/api/proxy', '/api/stream/remux');
       }
     }
+    if (startAt > 3 && src.includes('/api/stream/remux')) {
+      try {
+        const u = new URL(src, window.location.origin);
+        u.searchParams.set('startTime', String(Math.floor(startAt)));
+        src = u.toString();
+      } catch {}
+    }
     return src;
   }, []);
 
-  const [activeSource, setActiveSource] = useState<string>(() => getPlayableSource(stream));
+  const [activeSource, setActiveSource] = useState<string>(() => getPlayableSource(stream, initialTime));
 
   // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
+  const [currentTime, setCurrentTime] = useState(initialTime > 3 ? initialTime : 0);
   const [duration, setDuration] = useState<number>(() => (mediaDuration && isFinite(mediaDuration) && mediaDuration > 0 ? mediaDuration : 0));
   const durationRef = useRef<number>(duration);
   durationRef.current = duration;
@@ -79,10 +99,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [showAdvancedData, setShowAdvancedData] = useState(false);
 
   useEffect(() => {
-    setActiveSource(getPlayableSource(stream));
+    const shouldOffset = initialTime > 3 && (stream.url.includes('/api/stream/remux') || (stream.proxyUrl && stream.proxyUrl.includes('/api/stream/remux')));
+    const off = shouldOffset ? Math.floor(initialTime) : 0;
+    setStreamOffset(off);
+    setActiveSource(getPlayableSource(stream, initialTime));
     hasTriedFallback.current = false;
-    setStreamOffset(0);
-    setCurrentTime(0);
+    hasResumedRef.current = false;
+    setCurrentTime(initialTime > 3 ? initialTime : 0);
     setDownloadedBytes(0);
     setStreamingSpeed(0);
     setBufferedPercent(0);
@@ -90,7 +113,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     if (mediaDuration && isFinite(mediaDuration) && mediaDuration > 0) {
       setDuration(mediaDuration);
     }
-  }, [stream, getPlayableSource, mediaDuration]);
+  }, [stream, getPlayableSource, mediaDuration, initialTime]);
+
+  useEffect(() => {
+    if (resumeNotice) {
+      const timer = window.setTimeout(() => setResumeNotice(null), 5500);
+      return () => window.clearTimeout(timer);
+    }
+  }, [resumeNotice]);
 
   // Effective duration calculation
   const effectiveDuration =
@@ -376,16 +406,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     let detailMsg = 'The file or codec is unsupported or unavailable.';
     if (mediaError) {
       if (mediaError.code === 1) detailMsg = 'Video playback was aborted.';
-      else if (mediaError.code === 2) detailMsg = 'A network error occurred while fetching the video.';
+      else if (mediaError.code === 2) detailMsg = 'A network error occurred while fetching the video. If using a temporary link, it may have expired.';
       else if (mediaError.code === 3) detailMsg = 'Failed to decode media. The codec may not be supported by your browser.';
-      else if (mediaError.code === 4) detailMsg = 'Media source not supported or not accessible.';
+      else if (mediaError.code === 4) detailMsg = 'Media stream is unavailable or the streaming link has expired.';
       if (mediaError.message) detailMsg += ` (${mediaError.message})`;
+    }
+    if (onRefreshSource && mediaError && (mediaError.code === 2 || mediaError.code === 4)) {
+      detailMsg += ' If this stream link has expired, click "Refresh Link from Source".';
     }
 
     setIsLoadingMedia(false);
     setIsBuffering(false);
     onError(`Unable to play video. ${detailMsg}`);
-  }, [isAdaptive, stream.url, stream.proxyUrl, stream.mimeType, stream.label, activeSource, onError]);
+  }, [isAdaptive, stream.url, stream.proxyUrl, stream.mimeType, stream.label, activeSource, onError, onRefreshSource]);
 
   // Video element event listeners
   useEffect(() => {
@@ -409,6 +442,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const onCanPlay = () => {
       setIsLoadingMedia(false);
       setIsBuffering(false);
+
+      // Auto-resume playback position if initialTime was specified
+      if (initialTime > 3 && !hasResumedRef.current) {
+        hasResumedRef.current = true;
+        setResumeNotice({ time: initialTime });
+        if (!activeSource.includes('/api/stream/remux')) {
+          video.currentTime = initialTime;
+        }
+      }
+
       if (video.paused && !isAutoplayBlocked) {
         video.play().then(() => {
           setIsAutoplayBlocked(false);
@@ -435,6 +478,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         window.clearTimeout(hideTimerRef.current);
         hideTimerRef.current = null;
       }
+      const cur = (video.currentTime || 0) + streamOffsetRef.current;
+      const effDur = durationRef.current > 0 ? durationRef.current : (mediaDurationRef.current || 0);
+      onTimeUpdatePropRef.current?.(cur, effDur);
     };
     const onWaiting = () => {
       setIsBuffering(true);
@@ -450,6 +496,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const onTimeUpdate = () => {
       const cur = (video.currentTime || 0) + streamOffsetRef.current;
       setCurrentTime(cur);
+      const effDur = durationRef.current > 0 ? durationRef.current : (mediaDurationRef.current || 0);
+      onTimeUpdatePropRef.current?.(cur, effDur);
       if (video.buffered.length > 0) {
         let endAhead = 0;
         const vCur = video.currentTime || 0;
@@ -941,6 +989,31 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               </>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Resume Playback Floating Banner */}
+      {resumeNotice && (
+        <div className={styles.resumeToast}>
+          <span>Resumed from <strong>{formatTime(resumeNotice.time)}</strong></span>
+          <button
+            type="button"
+            className={styles.restartBtn}
+            onClick={() => {
+              handleSeek(0);
+              setResumeNotice(null);
+            }}
+          >
+            Start from beginning
+          </button>
+          <button
+            type="button"
+            className={styles.dismissToastBtn}
+            onClick={() => setResumeNotice(null)}
+            title="Dismiss"
+          >
+            ✕
+          </button>
         </div>
       )}
 

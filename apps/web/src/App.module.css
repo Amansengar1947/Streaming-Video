@@ -147,6 +147,22 @@
   border-color: var(--accent);
 }
 
+.historyBtn {
+  color: var(--text-primary);
+  font-weight: 600;
+  gap: 6px;
+}
+
+.historyBadge {
+  background-color: var(--accent);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  line-height: 1.2;
+}
+
 .desktopOnly {
   display: inline-flex;
 }
@@ -226,6 +242,10 @@
   }
 
   .snifferBtnText {
+    display: none;
+  }
+
+  .historyBtnText {
     display: none;
   }
 

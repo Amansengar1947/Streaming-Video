@@ -6,11 +6,21 @@ import { EmbedPlayer } from './EmbedPlayer.js';
 
 interface PlayerProps {
   media: ResolvedMedia;
+  initialTime?: number;
+  onTimeUpdate?: (currentTime: number, duration: number) => void;
   onOpenShortcuts: () => void;
   onError: (error: string) => void;
+  onRefreshSource?: () => void;
 }
 
-export const Player: React.FC<PlayerProps> = ({ media, onOpenShortcuts, onError }) => {
+export const Player: React.FC<PlayerProps> = ({
+  media,
+  initialTime,
+  onTimeUpdate,
+  onOpenShortcuts,
+  onError,
+  onRefreshSource,
+}) => {
   const streams = media.streams || [];
 
   const initialIndex = React.useMemo(() => {
@@ -54,8 +64,11 @@ export const Player: React.FC<PlayerProps> = ({ media, onOpenShortcuts, onError 
           stream={currentStream}
           mediaDuration={media.duration}
           poster={media.thumbnail}
+          initialTime={initialTime}
+          onTimeUpdate={onTimeUpdate}
           onOpenShortcuts={onOpenShortcuts}
           onError={onError}
+          onRefreshSource={onRefreshSource}
         />
       ) : media.kind === 'embed' && media.embedHtml ? (
         <EmbedPlayer embedHtml={media.embedHtml} title={media.title} />

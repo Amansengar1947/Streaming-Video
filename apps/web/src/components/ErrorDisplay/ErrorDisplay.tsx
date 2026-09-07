@@ -6,6 +6,7 @@ interface ErrorDisplayProps {
   message: string;
   detail?: string;
   onRetry?: () => void;
+  onRefreshSource?: () => void;
   onDismiss?: () => void;
   onOpenBrowser?: () => void;
 }
@@ -15,6 +16,7 @@ export const ErrorDisplay: React.FC<ErrorDisplayProps> = ({
   message,
   detail,
   onRetry,
+  onRefreshSource,
   onDismiss,
   onOpenBrowser,
 }) => {
@@ -51,13 +53,31 @@ export const ErrorDisplay: React.FC<ErrorDisplayProps> = ({
         )}
 
         <div className={styles.actions}>
+          {onRefreshSource && (
+            <button
+              className={styles.retryBtn}
+              onClick={onRefreshSource}
+              style={{
+                backgroundColor: 'var(--accent)',
+                color: '#fff',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontWeight: 600,
+              }}
+              title="Re-resolve fresh streaming link from original source (useful if pre-signed link expired)"
+            >
+              <span>🔄 Refresh Link from Source</span>
+            </button>
+          )}
           {onOpenBrowser && (
             <button
               className={styles.retryBtn}
               onClick={onOpenBrowser}
               style={{
-                backgroundColor: 'var(--accent)',
-                color: '#fff',
+                backgroundColor: 'var(--bg-surface)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-subtle)',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
