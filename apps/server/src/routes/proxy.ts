@@ -200,12 +200,12 @@ export const proxyRoutes: FastifyPluginAsync = async (fastify) => {
           const parsedRate = pacingRate ? Number(pacingRate) : NaN;
           const targetPacingRate = !isNaN(parsedRate) && parsedRate > 0
             ? Math.min(10 * 1024 * 1024, Math.max(256 * 1024, parsedRate))
-            : Math.floor(1.5 * 1024 * 1024);
+            : Math.floor(2.5 * 1024 * 1024); // 2.5 MB/s (~20 Mbps)
 
           streamTracker.startSession(url, 'proxy', targetPacingRate);
 
           const pacedStream = new PacedStream({
-            initialBurstBytes: 16 * 1024 * 1024,
+            initialBurstBytes: 24 * 1024 * 1024, // 24 MB initial burst
             pacingRateBytesPerSec: targetPacingRate,
             onChunk: (bytes) => {
               streamTracker.recordBytes(url, bytes);

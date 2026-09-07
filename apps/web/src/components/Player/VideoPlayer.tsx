@@ -141,7 +141,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   useEffect(() => {
     let isCancelled = false;
 
-    const interval = window.setInterval(async () => {
+    const poll = async () => {
       // 1. If Shaka Player is active, read estimated bandwidth
       if (playerRef.current) {
         try {
@@ -228,10 +228,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         }
         prevMeasurementTimeRef.current = now;
       }
-    }, 1000);
+    };
+
+    // Fast initial polls to grab duration & initial speed immediately
+    const t1 = window.setTimeout(poll, 250);
+    const t2 = window.setTimeout(poll, 650);
+    const interval = window.setInterval(poll, 1000);
 
     return () => {
       isCancelled = true;
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
       window.clearInterval(interval);
     };
   }, [activeSource, isBuffering, isPlaying, stream.bitrate]);

@@ -8,6 +8,7 @@ import { validateAndParseUrl } from '../security/url-validator.js';
 import { resolveAndValidateHost } from '../security/dns-resolver.js';
 import { PacedStream } from '../streams/paced-stream.js';
 import { streamTracker } from '../streams/stream-tracker.js';
+import { config } from '../config.js';
 
 export const remuxRoutes: FastifyPluginAsync = async (fastify) => {
   const server = fastify.withTypeProvider<TypeBoxTypeProvider>();
@@ -54,13 +55,29 @@ export const remuxRoutes: FastifyPluginAsync = async (fastify) => {
       // 3. Prepare FFmpeg args for zero-re-encode stream copy (-c copy) to fragmented MP4
       const ffmpegArgs: string[] = ['-loglevel', 'info'];
 
+      // Fast seek before input for instant keyframe jump
       if (startTime && !isNaN(Number(startTime)) && Number(startTime) > 0) {
         ffmpegArgs.push('-ss', String(startTime));
       }
 
+      // Network & probe optimizations for near-instant seek response
       ffmpegArgs.push(
         '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         '-protocol_whitelist', 'http,https,tcp,tls',
+        '-probesize', '1000000',
+        '-analyzeduration', '1000000',
+        '-fflags', '+nobuffer+fastseek',
+        '-reconnect', '1',
+        '-reconnect_at_eof', '1',
+        '-reconnect_streamed', '1',
+        '-reconnect_delay_max', '2'
+      );
+
+      if (config.warpProxyUrl) {
+        ffmpegArgs.push('-http_proxy', config.warpProxyUrl);
+      }
+
+      ffmpegArgs.push(
         '-i', parsedUrl.toString(),
         '-c', 'copy',
         '-f', 'mp4',
@@ -80,16 +97,16 @@ export const remuxRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       // 4. Create PacedStream to shape bandwidth:
-      // Burst 16 MB immediately for fast startup, then pace at 1.5 MB/s (~12 Mbps) steady-state.
+      // Burst 24 MB immediately for instant startup/seeking, then pace at 2.5 MB/s (~20 Mbps) steady-state.
       const parsedRate = pacingRate ? Number(pacingRate) : NaN;
       const targetPacingRate = !isNaN(parsedRate) && parsedRate > 0
         ? Math.min(10 * 1024 * 1024, Math.max(256 * 1024, parsedRate))
-        : Math.floor(1.5 * 1024 * 1024);
+        : Math.floor(2.5 * 1024 * 1024); // 2.5 MB/s (~20 Mbps)
 
       streamTracker.startSession(url, 'remux', targetPacingRate);
 
       const pacedStream = new PacedStream({
-        initialBurstBytes: 16 * 1024 * 1024,
+        initialBurstBytes: 24 * 1024 * 1024, // 24 MB burst
         pacingRateBytesPerSec: targetPacingRate,
         onChunk: (bytes) => {
           streamTracker.recordBytes(url, bytes);
@@ -131,9 +148,11 @@ export const remuxRoutes: FastifyPluginAsync = async (fastify) => {
         cleanup();
       });
 
+      let stderrAcc = '';
       ffmpegProc.stderr?.on('data', (chunk: Buffer) => {
         const text = chunk.toString();
-        const durMatch = text.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+        stderrAcc += text;
+        const durMatch = stderrAcc.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
         if (durMatch) {
           const hours = parseInt(durMatch[1], 10);
           const mins = parseInt(durMatch[2], 10);

@@ -15,6 +15,7 @@ export interface StreamSession {
 export class StreamTracker {
   private sessions = new Map<string, StreamSession>();
   private speedWindows = new Map<string, { bytes: number; time: number }>();
+  private cachedDurations = new Map<string, number>();
 
   private normalizeUrl(url: string): string {
     if (!url) return '';
@@ -31,6 +32,7 @@ export class StreamTracker {
   public startSession(rawUrl: string, mode: 'remux' | 'proxy', pacingRate: number): void {
     const url = this.normalizeUrl(rawUrl);
     const now = Date.now();
+    const existingDuration = this.cachedDurations.get(url);
     this.sessions.set(url, {
       url,
       mode,
@@ -40,6 +42,7 @@ export class StreamTracker {
       startTime: now,
       lastActivityTime: now,
       active: true,
+      duration: existingDuration,
     });
     this.speedWindows.set(url, { bytes: 0, time: now });
   }
@@ -67,11 +70,18 @@ export class StreamTracker {
   }
 
   public setDuration(rawUrl: string, duration: number): void {
+    if (!duration || isNaN(duration) || duration <= 0) return;
     const url = this.normalizeUrl(rawUrl);
+    this.cachedDurations.set(url, duration);
     const session = this.sessions.get(url);
-    if (session && (!session.duration || session.duration <= 0)) {
+    if (session) {
       session.duration = duration;
     }
+  }
+
+  public getDuration(rawUrl: string): number | undefined {
+    const url = this.normalizeUrl(rawUrl);
+    return this.cachedDurations.get(url);
   }
 
   public endSession(rawUrl: string): void {
@@ -86,7 +96,22 @@ export class StreamTracker {
   public getStats(rawUrl: string): StreamTelemetry | null {
     const url = this.normalizeUrl(rawUrl);
     const session = this.sessions.get(url);
-    if (!session) return null;
+    const cachedDur = this.cachedDurations.get(url);
+
+    if (!session) {
+      if (cachedDur && cachedDur > 0) {
+        return {
+          active: false,
+          bytesTransferred: 0,
+          speedBytesPerSec: 0,
+          pacingRate: 0,
+          elapsedSeconds: 0,
+          mode: 'idle',
+          duration: cachedDur,
+        };
+      }
+      return null;
+    }
 
     const now = Date.now();
     const elapsedSeconds = Math.max(0, Math.round(((now - session.startTime) / 1000) * 10) / 10);
@@ -104,7 +129,7 @@ export class StreamTracker {
       pacingRate: session.pacingRate,
       elapsedSeconds,
       mode: session.mode,
-      duration: session.duration,
+      duration: session.duration || cachedDur,
     };
   }
 }

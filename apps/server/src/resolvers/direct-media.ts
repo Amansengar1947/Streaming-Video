@@ -4,6 +4,69 @@ import type { ResolvedMedia, StreamInfo } from '@video-player/shared';
 import { AppError } from '@video-player/shared';
 import { safeFetch } from '../http/client.js';
 import { inferStreamType, isAllowedMediaContentType } from '../utils/mime.js';
+import { config } from '../config.js';
+import { streamTracker } from '../streams/stream-tracker.js';
+
+// Fast pure JS parser for Matroska EBML Duration in the first 128KB
+function parseMkvDuration(buf: Buffer): number | null {
+  let timecodeScale = 1000000;
+  const tcIdx = buf.indexOf(Buffer.from([0x2a, 0xd7, 0xb1]));
+  if (tcIdx !== -1 && tcIdx + 4 < buf.length) {
+    const sizeByte = buf[tcIdx + 3];
+    let len = 0;
+    let mask = 0x80;
+    for (let i = 0; i < 8; i++) {
+      if ((sizeByte & mask) !== 0) {
+        len = i + 1;
+        break;
+      }
+      mask >>= 1;
+    }
+    if (len > 0) {
+      let val = sizeByte & (mask - 1);
+      for (let i = 1; i < len; i++) {
+        val = (val << 8) | buf[tcIdx + 3 + i];
+      }
+      const offset = tcIdx + 3 + len;
+      let scale = 0;
+      for (let i = 0; i < val; i++) {
+        scale = (scale << 8) | buf[offset + i];
+      }
+      if (scale > 0) timecodeScale = scale;
+    }
+  }
+
+  const durIdx = buf.indexOf(Buffer.from([0x44, 0x89]));
+  if (durIdx !== -1 && durIdx + 3 < buf.length) {
+    const sizeByte = buf[durIdx + 2];
+    const len = sizeByte & 0x7f;
+    const offset = durIdx + 3;
+    if (len === 4 && offset + 4 <= buf.length) {
+      return (buf.readFloatBE(offset) * timecodeScale) / 1e9;
+    } else if (len === 8 && offset + 8 <= buf.length) {
+      return (buf.readDoubleBE(offset) * timecodeScale) / 1e9;
+    }
+  }
+  return null;
+}
+
+// Fast pure JS parser for MP4 mvhd duration in the first or last 128KB
+function parseMp4Duration(buf: Buffer): number | null {
+  const mvhdIdx = buf.indexOf(Buffer.from('mvhd'));
+  if (mvhdIdx !== -1 && mvhdIdx + 36 <= buf.length) {
+    const version = buf[mvhdIdx + 4];
+    if (version === 0) {
+      const timescale = buf.readUInt32BE(mvhdIdx + 16);
+      const duration = buf.readUInt32BE(mvhdIdx + 20);
+      if (timescale > 0 && duration > 0) return duration / timescale;
+    } else if (version === 1) {
+      const timescale = buf.readUInt32BE(mvhdIdx + 24);
+      const duration = Number(buf.readBigUInt64BE(mvhdIdx + 28));
+      if (timescale > 0 && duration > 0) return duration / timescale;
+    }
+  }
+  return null;
+}
 
 const DIRECT_MEDIA_EXTENSIONS = new Set([
   '.mp4',
@@ -56,15 +119,17 @@ export class DirectMediaResolver implements Resolver {
       // ignore
     }
 
+    let headerBuffer: Buffer | null = null;
+
     // 2. If HEAD failed, was forbidden (common for S3 / Cloudflare R2 presigned URLs), or returned non-media,
-    // fallback to a lightweight Range GET (first 100 bytes)
+    // fallback to a lightweight Range GET (first 128 KB) to inspect headers and format
     const isHeadForbiddenOrFailed = probeStatusCode === 401 || probeStatusCode === 403 || probeStatusCode === 405 || probeStatusCode >= 500 || !contentType;
     if (isHeadForbiddenOrFailed) {
       try {
         const getRes = await safeFetch(ctx.rawUrl, {
           method: 'GET',
-          headers: { range: 'bytes=0-100' },
-          timeoutMs: hasMediaExt ? 6000 : 3000,
+          headers: { range: 'bytes=0-131071' },
+          timeoutMs: hasMediaExt ? 6000 : 3500,
         });
         if (getRes.statusCode === 200 || getRes.statusCode === 206) {
           probeStatusCode = getRes.statusCode;
@@ -74,9 +139,17 @@ export class DirectMediaResolver implements Resolver {
           contentDisposition = Array.isArray(rawCd) ? rawCd[0] : (rawCd || '');
           ctx.sharedContentType = contentType;
           ctx.sharedHeadHeaders = getRes.headers;
+
+          const chunks: Buffer[] = [];
+          for await (const chunk of getRes.body) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            if (chunks.reduce((acc, c) => acc + c.length, 0) >= 131072) break;
+          }
+          headerBuffer = Buffer.concat(chunks);
+        } else {
+          getRes.body.on('error', () => {});
+          await getRes.body.dump();
         }
-        getRes.body.on('error', () => {});
-        await getRes.body.dump();
       } catch {
         if (!hasMediaExt) {
           return null;
@@ -167,41 +240,116 @@ export class DirectMediaResolver implements Resolver {
         size: fileSize,
       };
 
-      // Quick ffprobe duration probe (up to 2.2s timeout)
+      // Multi-layer duration resolution (pure JS fast-probe first, ffprobe as fallback)
       let probedDuration: number | undefined;
-      try {
-        probedDuration = await new Promise<number | undefined>((resolve) => {
-          const proc = spawn('ffprobe', [
-            '-v', 'error',
-            '-show_entries', 'format=duration',
-            '-of', 'default=noprint_wrappers=1:nokey=1',
-            '-timeout', '2000000',
-            ctx.rawUrl,
-          ]);
-          let out = '';
-          const timer = setTimeout(() => {
-            try { proc.kill('SIGKILL'); } catch {}
-            resolve(undefined);
-          }, 2200);
 
-          proc.stdout.on('data', (d) => { out += d.toString(); });
-          proc.on('close', (code) => {
-            clearTimeout(timer);
-            if (code === 0) {
-              const val = parseFloat(out.trim());
-              if (!isNaN(val) && val > 0) {
-                resolve(Math.round(val * 10) / 10);
-                return;
-              }
+      // 1. If headerBuffer not yet fetched, fetch first 128KB
+      if (!headerBuffer) {
+        try {
+          const rangeRes = await safeFetch(ctx.rawUrl, {
+            method: 'GET',
+            headers: { range: 'bytes=0-131071' },
+            timeoutMs: 3500,
+          });
+          if (rangeRes.statusCode === 200 || rangeRes.statusCode === 206) {
+            const chunks: Buffer[] = [];
+            for await (const chunk of rangeRes.body) {
+              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+              if (chunks.reduce((acc, c) => acc + c.length, 0) >= 131072) break;
             }
-            resolve(undefined);
+            headerBuffer = Buffer.concat(chunks);
+          } else {
+            rangeRes.body.on('error', () => {});
+            await rangeRes.body.dump();
+          }
+        } catch {}
+      }
+
+      // 2. Parse from header buffer (MKV Segment Info or MP4 faststart mvhd)
+      if (headerBuffer) {
+        const mkvDur = parseMkvDuration(headerBuffer);
+        const mp4Dur = parseMp4Duration(headerBuffer);
+        if (mkvDur && mkvDur > 0) {
+          probedDuration = Math.round(mkvDur * 10) / 10;
+        } else if (mp4Dur && mp4Dur > 0) {
+          probedDuration = Math.round(mp4Dur * 10) / 10;
+        }
+      }
+
+      // 3. For MP4 with moov atom placed at EOF (non-faststart), check tail 128KB
+      if (!probedDuration && fileSize && fileSize > 131072 && (pathname.endsWith('.mp4') || (contentType && contentType.includes('mp4')))) {
+        try {
+          const tailOffset = Math.max(0, fileSize - 131072);
+          const tailRes = await safeFetch(ctx.rawUrl, {
+            method: 'GET',
+            headers: { range: `bytes=${tailOffset}-${fileSize - 1}` },
+            timeoutMs: 3000,
           });
-          proc.on('error', () => {
-            clearTimeout(timer);
-            resolve(undefined);
+          if (tailRes.statusCode === 200 || tailRes.statusCode === 206) {
+            const chunks: Buffer[] = [];
+            for await (const chunk of tailRes.body) {
+              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            }
+            const tailBuf = Buffer.concat(chunks);
+            const tailDur = parseMp4Duration(tailBuf);
+            if (tailDur && tailDur > 0) {
+              probedDuration = Math.round(tailDur * 10) / 10;
+            }
+          } else {
+            tailRes.body.on('error', () => {});
+            await tailRes.body.dump();
+          }
+        } catch {}
+      }
+
+      // 4. Fallback: Quick ffprobe with full browser User-Agent and WARP proxy support
+      if (!probedDuration) {
+        try {
+          probedDuration = await new Promise<number | undefined>((resolve) => {
+            const ffprobeArgs = [
+              '-v', 'error',
+              '-show_entries', 'format=duration',
+              '-of', 'default=noprint_wrappers=1:nokey=1',
+              '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+              '-protocol_whitelist', 'http,https,tcp,tls',
+              '-analyzeduration', '2000000',
+              '-probesize', '2000000',
+            ];
+            if (config.warpProxyUrl) {
+              ffprobeArgs.push('-http_proxy', config.warpProxyUrl);
+            }
+            ffprobeArgs.push(ctx.rawUrl);
+
+            const proc = spawn('ffprobe', ffprobeArgs);
+            let out = '';
+            const timer = setTimeout(() => {
+              try { proc.kill('SIGKILL'); } catch {}
+              resolve(undefined);
+            }, 2500);
+
+            proc.stdout.on('data', (d) => { out += d.toString(); });
+            proc.on('close', (code) => {
+              clearTimeout(timer);
+              if (code === 0) {
+                const val = parseFloat(out.trim());
+                if (!isNaN(val) && val > 0) {
+                  resolve(Math.round(val * 10) / 10);
+                  return;
+                }
+              }
+              resolve(undefined);
+            });
+            proc.on('error', () => {
+              clearTimeout(timer);
+              resolve(undefined);
+            });
           });
-        });
-      } catch {}
+        } catch {}
+      }
+
+      if (probedDuration && probedDuration > 0) {
+        streamTracker.setDuration(ctx.rawUrl, probedDuration);
+      }
 
       return {
         kind: 'player',
