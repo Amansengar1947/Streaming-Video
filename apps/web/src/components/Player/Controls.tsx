@@ -120,7 +120,8 @@ export const Controls: React.FC<ControlsProps> = ({
           className={`${styles.centerActionBtn} ${styles.centerSkipBtn}`}
           onClick={(e) => {
             e.stopPropagation();
-            onSeek(Math.min(duration, currentTime + 10));
+            const maxT = isFinite(duration) && duration > 0 ? duration : Infinity;
+            onSeek(Math.min(maxT, currentTime + 10));
           }}
           title="Forward 10s"
           aria-label="Forward 10 seconds"
@@ -180,7 +181,10 @@ export const Controls: React.FC<ControlsProps> = ({
             <button
               type="button"
               className={styles.ctrlBtn}
-              onClick={() => onSeek(Math.min(duration, currentTime + 10))}
+              onClick={() => {
+                const maxT = isFinite(duration) && duration > 0 ? duration : Infinity;
+                onSeek(Math.min(maxT, currentTime + 10));
+              }}
               title="Forward 10s (Right Arrow)"
               aria-label="Forward 10 seconds"
             >

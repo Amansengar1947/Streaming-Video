@@ -52,7 +52,7 @@ export const remuxRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       // 3. Prepare FFmpeg args for zero-re-encode stream copy (-c copy) to fragmented MP4
-      const ffmpegArgs: string[] = ['-loglevel', 'error'];
+      const ffmpegArgs: string[] = ['-loglevel', 'info'];
 
       if (startTime && !isNaN(Number(startTime)) && Number(startTime) > 0) {
         ffmpegArgs.push('-ss', String(startTime));
@@ -132,7 +132,20 @@ export const remuxRoutes: FastifyPluginAsync = async (fastify) => {
       });
 
       ffmpegProc.stderr?.on('data', (chunk: Buffer) => {
-        request.log.warn({ ffmpegStderr: chunk.toString() }, 'FFmpeg remux stderr');
+        const text = chunk.toString();
+        const durMatch = text.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+        if (durMatch) {
+          const hours = parseInt(durMatch[1], 10);
+          const mins = parseInt(durMatch[2], 10);
+          const secs = parseFloat(durMatch[3]);
+          const totalSecs = Math.round((hours * 3600 + mins * 60 + secs) * 10) / 10;
+          if (totalSecs > 0) {
+            streamTracker.setDuration(url, totalSecs);
+          }
+        }
+        if (text.toLowerCase().includes('error')) {
+          request.log.warn({ ffmpegStderr: text }, 'FFmpeg remux stderr');
+        }
       });
 
       ffmpegProc.stdout.pipe(pacedStream);

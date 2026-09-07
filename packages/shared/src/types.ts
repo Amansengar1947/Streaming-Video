@@ -24,6 +24,7 @@ export interface StreamTelemetry {
   elapsedSeconds: number;
   mode: 'remux' | 'proxy' | 'idle';
   totalSize?: number;
+  duration?: number;
 }
 
 export interface ResolvedMedia {

@@ -52,6 +52,7 @@ export const Player: React.FC<PlayerProps> = ({ media, onOpenShortcuts, onError 
       {media.kind === 'player' && currentStream ? (
         <VideoPlayer
           stream={currentStream}
+          mediaDuration={media.duration}
           poster={media.thumbnail}
           onOpenShortcuts={onOpenShortcuts}
           onError={onError}

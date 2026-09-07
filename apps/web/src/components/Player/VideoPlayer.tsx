@@ -9,6 +9,7 @@ import { AdvancedStatsModal } from './AdvancedStatsModal.js';
 
 interface VideoPlayerProps {
   stream: StreamInfo;
+  mediaDuration?: number;
   poster?: string;
   onOpenShortcuts: () => void;
   onError: (error: string) => void;
@@ -16,6 +17,7 @@ interface VideoPlayerProps {
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   stream,
+  mediaDuration,
   poster,
   onOpenShortcuts,
   onError,
@@ -26,6 +28,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   // Fallback guard to strictly prevent infinite reload loops
   const hasTriedFallback = useRef(false);
+
+  // Stream offset for remux streams seeking beyond buffer
+  const [streamOffset, setStreamOffset] = useState<number>(0);
+  const streamOffsetRef = useRef<number>(0);
+  streamOffsetRef.current = streamOffset;
+
+  const mediaDurationRef = useRef<number | undefined>(mediaDuration);
+  mediaDurationRef.current = mediaDuration;
 
   // Active source for progressive (non-Shaka) media: prioritize proxyUrl if stream requires proxy
   // MKV Guardian: Never pass raw MKV directly to <video> when remux/proxy is available
@@ -44,19 +54,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   const [activeSource, setActiveSource] = useState<string>(() => getPlayableSource(stream));
 
-  useEffect(() => {
-    setActiveSource(getPlayableSource(stream));
-    hasTriedFallback.current = false;
-    setDownloadedBytes(0);
-    setStreamingSpeed(0);
-    setBufferedPercent(0);
-    setBufferedSecondsAhead(0);
-  }, [stream, getPlayableSource]);
-
   // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [duration, setDuration] = useState<number>(() => (mediaDuration && isFinite(mediaDuration) && mediaDuration > 0 ? mediaDuration : 0));
+  const durationRef = useRef<number>(duration);
+  durationRef.current = duration;
+
   const [bufferedEnd, setBufferedEnd] = useState(0);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
@@ -74,6 +78,30 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [videoDimensions, setVideoDimensions] = useState({ width: 0, height: 0 });
   const [showAdvancedData, setShowAdvancedData] = useState(false);
 
+  useEffect(() => {
+    setActiveSource(getPlayableSource(stream));
+    hasTriedFallback.current = false;
+    setStreamOffset(0);
+    setCurrentTime(0);
+    setDownloadedBytes(0);
+    setStreamingSpeed(0);
+    setBufferedPercent(0);
+    setBufferedSecondsAhead(0);
+    if (mediaDuration && isFinite(mediaDuration) && mediaDuration > 0) {
+      setDuration(mediaDuration);
+    }
+  }, [stream, getPlayableSource, mediaDuration]);
+
+  // Effective duration calculation
+  const effectiveDuration =
+    isFinite(duration) && duration > 0
+      ? duration
+      : mediaDuration && isFinite(mediaDuration) && mediaDuration > 0
+      ? mediaDuration
+      : isFinite(videoRef.current?.duration || 0) && (videoRef.current?.duration || 0) > 0
+      ? (videoRef.current?.duration || 0) + streamOffset
+      : 0;
+
   // Refs for tracking network speed & bytes
   const prevTransferSizeRef = useRef<number>(0);
   const prevMeasurementTimeRef = useRef<number>(performance.now());
@@ -87,13 +115,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideTimerRef = useRef<number | null>(null);
 
+  // Touch tracking to isolate synthetic mobile mouse movements
+  const isTouchRef = useRef(false);
+  const touchTimeoutRef = useRef<number | null>(null);
+
   // Mobile double-tap gestures and ripple animation state
   const [ripple, setRipple] = useState<{ side: 'left' | 'right'; id: number } | null>(null);
   const lastTapTimeRef = useRef<number>(0);
   const lastTapXRef = useRef<number>(0);
   const singleTapTimerRef = useRef<number | null>(null);
 
-  const resetHideTimer = useCallback(() => {
+  const resetHideTimer = useCallback((timeoutMs = 4500) => {
     setControlsVisible(true);
     if (hideTimerRef.current) {
       window.clearTimeout(hideTimerRef.current);
@@ -102,7 +134,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       if (videoRef.current && !videoRef.current.paused) {
         setControlsVisible(false);
       }
-    }, 3000);
+    }, timeoutMs);
   }, []);
 
   // Speedometer & Network Telemetry Engine
@@ -129,6 +161,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           if (res.ok) {
             const data = await res.json();
             if (!isCancelled && data) {
+              if (typeof data.duration === 'number' && data.duration > 0) {
+                setDuration((prev) => (!isFinite(prev) || prev <= 0 ? data.duration : prev));
+              }
               if (typeof data.bytesTransferred === 'number' && data.bytesTransferred > 0) {
                 setDownloadedBytes(data.bytesTransferred);
                 gotServerTelemetry = true;
@@ -355,7 +390,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       setLoadingStatus('Connecting to media stream...');
     };
     const onLoadedMetadata = () => {
-      setDuration(video.duration || 0);
+      const vidDur = video.duration;
+      if (isFinite(vidDur) && vidDur > 0) {
+        setDuration(vidDur + streamOffsetRef.current);
+      } else if (mediaDurationRef.current && mediaDurationRef.current > 0) {
+        setDuration(mediaDurationRef.current);
+      }
       setVideoDimensions({ width: video.videoWidth || 0, height: video.videoHeight || 0 });
       setLoadingStatus('Metadata loaded, preparing playback...');
     };
@@ -379,10 +419,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       setIsLoadingMedia(false);
       setIsBuffering(false);
       setIsAutoplayBlocked(false);
+      resetHideTimer(4500);
     };
     const onPause = () => {
       setIsPlaying(false);
       setControlsVisible(true);
+      if (hideTimerRef.current) {
+        window.clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
     };
     const onWaiting = () => {
       setIsBuffering(true);
@@ -396,36 +441,44 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       setIsBuffering(false);
     };
     const onTimeUpdate = () => {
-      const cur = video.currentTime;
+      const cur = (video.currentTime || 0) + streamOffsetRef.current;
       setCurrentTime(cur);
       if (video.buffered.length > 0) {
         let endAhead = 0;
+        const vCur = video.currentTime || 0;
         for (let i = 0; i < video.buffered.length; i++) {
           const start = video.buffered.start(i);
           const end = video.buffered.end(i);
-          if (cur >= start && cur <= end) {
+          if (vCur >= start && vCur <= end) {
             endAhead = end;
             break;
           }
         }
         if (endAhead > 0) {
-          setBufferedSecondsAhead(Math.max(0, endAhead - cur));
+          setBufferedSecondsAhead(Math.max(0, endAhead - vCur));
         }
       }
     };
-    const onDurationChange = () => setDuration(video.duration || 0);
+    const onDurationChange = () => {
+      const vidDur = video.duration;
+      if (isFinite(vidDur) && vidDur > 0) {
+        setDuration(vidDur + streamOffsetRef.current);
+      } else if (mediaDurationRef.current && mediaDurationRef.current > 0) {
+        setDuration(mediaDurationRef.current);
+      }
+    };
     const onVolumeChange = () => {
       setVolume(video.volume);
       setIsMuted(video.muted);
     };
     const onProgress = () => {
       if (video.buffered.length > 0) {
-        const cur = video.currentTime;
+        const vCur = video.currentTime || 0;
         let endAhead = 0;
         for (let i = 0; i < video.buffered.length; i++) {
           const start = video.buffered.start(i);
           const end = video.buffered.end(i);
-          if (cur >= start && cur <= end) {
+          if (vCur >= start && vCur <= end) {
             endAhead = end;
             break;
           }
@@ -433,13 +486,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         if (endAhead === 0 && video.buffered.length > 0) {
           endAhead = video.buffered.end(video.buffered.length - 1);
         }
-        setBufferedEnd(endAhead);
+        const effectiveEnd = endAhead + streamOffsetRef.current;
+        setBufferedEnd(effectiveEnd);
 
-        const dur = video.duration || 0;
-        if (dur > 0) {
-          setBufferedPercent(Math.min(100, (endAhead / dur) * 100));
+        const currentDur = isFinite(durationRef.current) && durationRef.current > 0
+          ? durationRef.current
+          : (mediaDurationRef.current || 0);
+        if (currentDur > 0) {
+          setBufferedPercent(Math.min(100, (effectiveEnd / currentDur) * 100));
         }
-        setBufferedSecondsAhead(Math.max(0, endAhead - cur));
+        setBufferedSecondsAhead(Math.max(0, endAhead - vCur));
       }
     };
     const onRateChange = () => setPlaybackRate(video.playbackRate);
@@ -516,32 +572,44 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const handleSeek = useCallback((time: number) => {
     const video = videoRef.current;
     if (!video) return;
-    const targetTime = Math.max(0, Math.min(time, video.duration || 0));
 
-    // For remuxed streams: if seeking outside currently buffered range, request fresh remux stream from target time
+    const maxT = effectiveDuration > 0 ? effectiveDuration : Infinity;
+    const targetTime = Math.max(0, Math.min(time, maxT));
+
+    // For remuxed streams: check if target is inside currently buffered range of the stream
     if (activeSource.includes('/api/stream/remux')) {
+      const relTarget = targetTime - streamOffset;
       let isTargetBuffered = false;
-      for (let i = 0; i < video.buffered.length; i++) {
-        if (targetTime >= video.buffered.start(i) && targetTime <= video.buffered.end(i)) {
-          isTargetBuffered = true;
-          break;
+      if (relTarget >= 0) {
+        for (let i = 0; i < video.buffered.length; i++) {
+          if (relTarget >= video.buffered.start(i) && relTarget <= video.buffered.end(i)) {
+            isTargetBuffered = true;
+            break;
+          }
         }
       }
 
       if (!isTargetBuffered) {
         try {
+          const newOffset = Math.floor(targetTime);
+          setStreamOffset(newOffset);
+          setCurrentTime(targetTime);
           const urlObj = new URL(activeSource, window.location.origin);
-          urlObj.searchParams.set('startTime', String(Math.floor(targetTime)));
+          urlObj.searchParams.set('startTime', String(newOffset));
           setActiveSource(urlObj.toString());
           setIsLoadingMedia(true);
           setLoadingStatus(`Seeking to ${formatTime(targetTime)}...`);
           return;
         } catch {}
+      } else {
+        video.currentTime = relTarget;
+        return;
       }
     }
 
+    // For native progressive or Shaka adaptive:
     video.currentTime = targetTime;
-  }, [activeSource]);
+  }, [activeSource, effectiveDuration, streamOffset]);
 
   const handleVolumeChange = useCallback((newVolume: number) => {
     const video = videoRef.current;
@@ -666,10 +734,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           onOpenShortcuts();
           break;
         default:
-          if (e.key >= '0' && e.key <= '9' && duration > 0) {
+          if (e.key >= '0' && e.key <= '9' && effectiveDuration > 0) {
             e.preventDefault();
             const percent = parseInt(e.key, 10) / 10;
-            handleSeek(duration * percent);
+            handleSeek(effectiveDuration * percent);
           }
           break;
       }
@@ -679,7 +747,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     currentTime,
-    duration,
+    effectiveDuration,
     volume,
     handleTogglePlay,
     handleSeek,
@@ -692,10 +760,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   ]);
 
   const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // If target is an interactive control, let its own handler execute
     const target = e.target as HTMLElement;
-    if (target.closest('button') || target.closest('input') || target.closest('[role="slider"]')) {
-      resetHideTimer();
+    // If click is on interactive controls, reset timer and prevent dismissing
+    if (
+      target.closest('button') ||
+      target.closest('input') ||
+      target.closest('[role="slider"]') ||
+      target.closest(`.${styles.controlsOverlay}`) ||
+      target.closest(`.${styles.statsModal}`)
+    ) {
+      resetHideTimer(4500);
       return;
     }
 
@@ -722,7 +796,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       }
       // Right 35% -> Forward 10s
       if (clickX > width * 0.65) {
-        handleSeek(Math.min(duration, currentTime + 10));
+        const maxT = effectiveDuration > 0 ? effectiveDuration : Infinity;
+        handleSeek(Math.min(maxT, currentTime + 10));
         setRipple({ side: 'right', id: now });
         setTimeout(() => setRipple(null), 650);
         return;
@@ -730,13 +805,26 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       // Center double tap -> Toggle Play
       handleTogglePlay();
     } else {
-      // Single tap: toggle controls overlay
+      // Single tap on empty video background:
+      // If controls hidden -> show them for 4.5 seconds
+      // If controls visible -> hide them immediately
+      if (singleTapTimerRef.current) {
+        window.clearTimeout(singleTapTimerRef.current);
+      }
       singleTapTimerRef.current = window.setTimeout(() => {
         setControlsVisible((prev) => {
-          if (!prev) resetHideTimer();
-          return !prev;
+          if (!prev) {
+            resetHideTimer(4500);
+            return true;
+          } else {
+            if (hideTimerRef.current) {
+              window.clearTimeout(hideTimerRef.current);
+              hideTimerRef.current = null;
+            }
+            return false;
+          }
         });
-      }, 220);
+      }, 240);
     }
   };
 
@@ -744,7 +832,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     <div
       className={styles.playerContainer}
       ref={containerRef}
-      onMouseMove={resetHideTimer}
+      onTouchStart={() => {
+        isTouchRef.current = true;
+        if (touchTimeoutRef.current) window.clearTimeout(touchTimeoutRef.current);
+        touchTimeoutRef.current = window.setTimeout(() => {
+          isTouchRef.current = false;
+        }, 1200);
+      }}
+      onMouseMove={() => {
+        if (isTouchRef.current) return;
+        resetHideTimer(4000);
+      }}
       onClick={handleContainerClick}
     >
       <video
@@ -843,7 +941,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       <Controls
         isPlaying={isPlaying}
         currentTime={currentTime}
-        duration={duration}
+        duration={effectiveDuration}
         bufferedEnd={bufferedEnd}
         streamingSpeed={streamingSpeed}
         volume={volume}
@@ -873,7 +971,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         onClose={() => setShowAdvancedData(false)}
         stats={{
           currentTime,
-          duration,
+          duration: effectiveDuration,
           bufferedEnd,
           bufferedPercent,
           bufferedSecondsAhead,

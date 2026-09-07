@@ -9,6 +9,7 @@ export interface StreamSession {
   startTime: number;
   lastActivityTime: number;
   active: boolean;
+  duration?: number;
 }
 
 export class StreamTracker {
@@ -65,6 +66,14 @@ export class StreamTracker {
     }
   }
 
+  public setDuration(rawUrl: string, duration: number): void {
+    const url = this.normalizeUrl(rawUrl);
+    const session = this.sessions.get(url);
+    if (session && (!session.duration || session.duration <= 0)) {
+      session.duration = duration;
+    }
+  }
+
   public endSession(rawUrl: string): void {
     const url = this.normalizeUrl(rawUrl);
     const session = this.sessions.get(url);
@@ -95,6 +104,7 @@ export class StreamTracker {
       pacingRate: session.pacingRate,
       elapsedSeconds,
       mode: session.mode,
+      duration: session.duration,
     };
   }
 }

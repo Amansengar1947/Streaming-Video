@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import type { Resolver, ResolverContext } from './base.js';
 import type { ResolvedMedia, StreamInfo } from '@video-player/shared';
 import { AppError } from '@video-player/shared';
@@ -166,10 +167,47 @@ export class DirectMediaResolver implements Resolver {
         size: fileSize,
       };
 
+      // Quick ffprobe duration probe (up to 2.2s timeout)
+      let probedDuration: number | undefined;
+      try {
+        probedDuration = await new Promise<number | undefined>((resolve) => {
+          const proc = spawn('ffprobe', [
+            '-v', 'error',
+            '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+            '-timeout', '2000000',
+            ctx.rawUrl,
+          ]);
+          let out = '';
+          const timer = setTimeout(() => {
+            try { proc.kill('SIGKILL'); } catch {}
+            resolve(undefined);
+          }, 2200);
+
+          proc.stdout.on('data', (d) => { out += d.toString(); });
+          proc.on('close', (code) => {
+            clearTimeout(timer);
+            if (code === 0) {
+              const val = parseFloat(out.trim());
+              if (!isNaN(val) && val > 0) {
+                resolve(Math.round(val * 10) / 10);
+                return;
+              }
+            }
+            resolve(undefined);
+          });
+          proc.on('error', () => {
+            clearTimeout(timer);
+            resolve(undefined);
+          });
+        });
+      } catch {}
+
       return {
         kind: 'player',
         title: cleanTitle || 'Direct Media Stream',
         originalUrl: ctx.rawUrl,
+        duration: probedDuration,
         streams: [stream],
       };
     }
